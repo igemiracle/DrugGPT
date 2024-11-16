@@ -21,44 +21,7 @@ class MIMICPreprocessor:
         )
         self.logger = logging.getLogger(__name__)
     
-    def load_tables(self) -> Dict[str, pd.DataFrame]:
-        self.logger.info("Loading MIMIC tables...")
-        
-        required_tables = {
-            'NOTEEVENTS': [
-                'SUBJECT_ID', 'HADM_ID', 'CHARTDATE', 'CATEGORY', 'TEXT'
-            ],
-            'PRESCRIPTIONS': [
-                'SUBJECT_ID', 'HADM_ID', 'STARTDATE', 'ENDDATE',
-                'DRUG_TYPE', 'DRUG', 'DRUG_NAME_POE', 'DRUG_NAME_GENERIC',
-                'PROD_STRENGTH', 'DOSE_VAL_RX', 'DOSE_UNIT_RX',
-                'FORM_VAL_DISP', 'FORM_UNIT_DISP', 'ROUTE'
-            ],
-            'PATIENTS': [
-                'SUBJECT_ID', 'GENDER', 'DOB', 'DOD', 
-                'DOD_HOSP', 'DOD_SSN', 'EXPIRE_FLAG'
-            ],
-            'DIAGNOSES_ICD': [
-                'SUBJECT_ID', 'HADM_ID', 'ICD9_CODE', 'SEQ_NUM'
-            ]
-        }
-        
-        tables = {}
-        for table_name, columns in required_tables.items():
-            file_path = self.data_path / f"{table_name}.csv"
-            try:
-                tables[table_name] = pd.read_csv(
-                    file_path,
-                    usecols=columns,
-                    low_memory=False
-                )
-                self.logger.info(f"Successfully loaded {table_name}, shape: {tables[table_name].shape}")
-            except Exception as e:
-                self.logger.error(f"Failed to load {table_name}: {str(e)}")
-                raise
-                
-        return tables
-    """
+
     def load_tables(self) -> Dict[str, pd.DataFrame]:
         "Load required MIMIC tables with memory optimization"
         self.logger.info("Loading MIMIC tables with optimization...")
@@ -127,7 +90,7 @@ class MIMICPreprocessor:
                 raise
                 
         return tables
-    """
+
     def process_demographics(self, patients_df: pd.DataFrame) -> pd.DataFrame:
         """Process patient demographics with fixed datetime handling"""
         self.logger.info("Processing demographics data...")
