@@ -17,7 +17,6 @@ sys.path.append('../src')
 
 # Import your existing components
 try:
-    from llm import IntegratedMedicalRAG
     from Embedding import ClinicalEmbeddingProcessor
     from Retrival import ClinicalRetrievalSystem
     from EnhancedRetrival import EnhancedClinicalRetrieval
@@ -26,7 +25,7 @@ try:
 except Exception as e:
     st.error(f"Error importing components: {str(e)}")
 
-def initialize_system():
+def initialize_components():
     """Initialize all required components"""
     try:
         # Initialize processor
@@ -48,16 +47,7 @@ def initialize_system():
             icd9_map_path='../data/icd9_map.csv'
         )
         
-         # Initialize integrated RAG system
-        integrated_rag = IntegratedMedicalRAG(
-            retriever=enhanced_retriever,
-            processor=processor,
-            min_similarity=0.5,
-            top_k=5
-        )
-        
-        return integrated_rag
-    
+        return processor, enhanced_retriever
     except Exception as e:
         st.error(f"Error initializing components: {str(e)}")
         return None, None
@@ -260,10 +250,22 @@ def main():
     This system provides medication guidence and personalized treatments using LLaMA 3.2 1B.
     """)
     
-    # Initialize system if not already done
-    if 'rag_system' not in st.session_state:
-        with st.spinner("Initializing system..."):
-            st.session_state.rag_system = initialize_system()
+    # Initialize all components if not already initialized
+    if 'initialized' not in st.session_state:
+        with st.spinner("Initializing components..."):
+            processor, enhanced_retriever = initialize_components()
+            model, tokenizer = initialize_llm()
+            
+            if all([processor, enhanced_retriever, model, tokenizer]):
+                st.session_state.processor = processor
+                st.session_state.enhanced_retriever = enhanced_retriever
+                st.session_state.model = model
+                st.session_state.tokenizer = tokenizer
+                st.session_state.initialized = True
+                st.success("All components initialized successfully!")
+            else:
+                st.error("Failed to initialize components")
+                return
             
     if 'model' in st.session_state:
         st.write("Model device:", next(st.session_state.model.parameters()).device)
@@ -271,6 +273,7 @@ def main():
         
     # Create two columns
     col1, col2 = st.columns([1, 1.5])
+    
     with col1:
         st.subheader("Patient Information")
         
@@ -306,61 +309,51 @@ def main():
             submit = st.form_submit_button("Generate Recommendation")
     
     with col2:
-        if submit and st.session_state.rag_system:
+        if submit and st.session_state.initialized:
+            
             if not all([age_group, gender, diagnoses, medications]):
                 st.error("Please fill in all required fields.")
                 return
             
             with st.spinner("Processing..."):
                 try:
-                    # Prepare case data
+                    # Get similar cases
+                    case_text = f"Patient: {age_group} {gender} [SEP]Diagnoses: {diagnoses} [SEP]Medications: {medications} [SEP]History: {history}"
+                    case_embedding = st.session_state.processor.get_case_embedding(case_text)
+                    similar_cases = st.session_state.enhanced_retriever.find_similar_cases(
+                        case_embedding,
+                        k=5,
+                        remove_duplicates=True
+                    )
+                    
+                    # Prepare data
                     case_data = {
                         'age_group': age_group,
                         'gender': gender,
                         'diagnoses': [d.strip() for d in diagnoses.split(',')],
                         'medications': medications,
-                        'sections': {
-                            'history': history,
-                            'plan': 'Medication adjustment needed'
-                        }
+                        'history': history
                     }
                     
-                    # Generate recommendation using integrated RAG system
-                    result = st.session_state.rag_system.process_case(case_data)
+                    # Generate recommendation
+                    st.write("Preparing to generate recommendation...")
+                    prompt = construct_prompt(case_data, similar_cases)
+                    recommendation = generate_recommendation(
+                        st.session_state.model,
+                        st.session_state.tokenizer,
+                        prompt
+                    )
                     
-                    # Display medical disclaimer
-                    st.warning("⚕️ MEDICAL DISCLAIMER: This system provides recommendations for reference only. All medical decisions should be made under professional medical supervision.")
-                    
-                    # Display recommendation
-                    st.subheader("💊 Treatment Recommendation")
-                    st.info(result.recommendation)
-                    
-                    with st.expander("📋 Clinical Rationale"):
-                        st.write(result.evidence)
-                    
-                    with st.expander("⚠️ Risks and Precautions"):
-                        for risk in result.risks:
-                            st.write(f"• {risk}")
-                    
-                    with st.expander("📊 Similar Cases Analysis"):
-                        for i, case in enumerate(result.similar_cases, 1):
-                            st.markdown(f"""
-                            **Case {i}** (Similarity: {case['similarity']:.2f})
-                            - Demographics: {case['demographics']}
-                            - Diagnoses: {', '.join(case['diagnoses'])}
-                            - Medications: {case['medications']}
-                            ---
-                            """)
-                    
-                    # Display confidence score
-                    st.write(f"Confidence Score: {result.confidence:.2f}")
-                    
-                    # Display disclaimer again at the bottom
-                    st.info("⚕️ NOTE: All recommendations must be verified by healthcare professionals. This is not a substitute for professional medical advice.")
+                    if recommendation:
+                        display_recommendation(recommendation, similar_cases)
+                    else:
+                        st.error("Failed to generate recommendation")
+                        
                     
                 except Exception as e:
-                    st.error(f"Error generating recommendation: {str(e)}")
+                    st.error(f"Error: {str(e)}")
                     st.exception(e)
+
 
 if __name__ == "__main__":
     main()
