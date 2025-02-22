@@ -109,8 +109,8 @@ This project is licensed under the [LICENSE](LICENSE) file in the repository.
 
 ## Authors
 
-- Yuning Zheng
-- Mercury Liu
+- Yuning Zheng @[Igemirecle](https://github.com/igemiracle)
+- Mercury Liu @[Europix](https://github.com/Europix)
 
 ## Acknowledgments
 
